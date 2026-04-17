@@ -1,20 +1,10 @@
 window.addEventListener("load", async () => {
 
     const url = window.location.href;
-
-    console.log("Checking URL:", url);
-
     const result = checkDNS(url);
 
-    console.log("DNS Result:", result);
+    if (!result || !result.status) return;
 
-    // Safety check
-    if (!result || !result.status) {
-        console.error("DNS check failed:", result);
-        return;
-    }
-
-    // FUNCTION FIRST (IMPORTANT)
     async function getIP() {
         try {
             const res = await fetch("https://api.ipify.org?format=json");
@@ -25,16 +15,18 @@ window.addEventListener("load", async () => {
         }
     }
 
-    // BLOCK if spoofed
     if (result.status === "spoofed") {
 
         const ip = await getIP();
 
         const overlay = document.createElement("div");
-
         overlay.classList.add("cd-overlay");
 
         overlay.innerHTML = `
+            <div class="cd-alert-bar">
+                This site has been blocked for your safety
+            </div>
+
             <div class="cd-header">
                 <img src="${chrome.runtime.getURL('assets/icon.png')}"/>
                 <span>CyberDetect</span>
@@ -42,21 +34,38 @@ window.addEventListener("load", async () => {
 
             <div class="cd-main">
 
-                <h1 class="cd-title">⚠️ Unsafe Website Blocked</h1>
-
-                <p class="cd-message">
-                    CyberDetect AI has detected this website as a potential phishing or spoofing threat.
-                    Access has been restricted to protect your system, identity, and sensitive data.
-                </p>
-
-                <div class="cd-info">
-                    <div><strong>URL:</strong> ${url}</div>
-                    <div><strong>IP Address:</strong> ${ip}</div>
+                <!-- LEFT -->
+                <div class="cd-left">
+                    <img class="cd-big-icon" src="${chrome.runtime.getURL('assets/danger.png')}" />
                 </div>
 
-                <div class="cd-buttons">
-                    <button class="safe-btn">Go Back to Safety</button>
-                    <button class="danger-btn">Continue Anyway</button>
+                <!-- RIGHT -->
+                <div class="cd-right">
+
+                    <h1 class="cd-title">Access Blocked</h1>
+
+                    <div class="cd-body">
+                        <p class="cd-message">
+                            This website has been identified as a potential phishing or spoofing threat.
+                            CyberDetect prevented access to protect your data and credentials.
+                        </p>
+
+                        <div class="cd-info-box">
+                            <p><strong>URL:</strong> ${url}</p>
+                            <p><strong>IP Address:</strong> ${ip}</p>
+                        </div>
+                    </div>
+
+                    <div class="cd-buttons">
+                        <button class="safe-btn" onclick="window.location.href='https://google.com'">
+                            Go Back
+                        </button>
+
+                        <button class="danger-btn" onclick="window.location.reload()">
+                            Continue (Unsafe)
+                        </button>
+                    </div>
+
                 </div>
 
             </div>
@@ -65,30 +74,46 @@ window.addEventListener("load", async () => {
         const style = document.createElement("style");
 
         style.innerHTML = `
+        html, body {
+            margin: 0;
+            overflow: hidden !important;
+        }
+
         .cd-overlay {
             position: fixed !important;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+            flex-direction: column;
+
             background: #f8fafc;
             z-index: 2147483647;
             font-family: 'Segoe UI', sans-serif;
-            color: #1e293b;
         }
 
-        /* BIGGER HEADER */
+        /* ALERT */
+        .cd-alert-bar {
+            width: 100%;
+            background: #fee2e2;
+            color: #991b1b;
+            text-align: center;
+            padding: 14px;
+            font-weight: 700;
+        }
+
+        /* HEADER (UNCHANGED) */
         .cd-header {
-            position: absolute;
-            top: 30px;
-            left: 50px;
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
+            margin: 20px 40px;
         }
 
         .cd-header img {
-            width: 60px; 
+            width: 70px;
         }
 
         .cd-header span {
@@ -96,59 +121,97 @@ window.addEventListener("load", async () => {
             font-weight: 700;
         }
 
-        /*  FULL PAGE UTILIZATION */
+        /* MAIN */
         .cd-main {
-            height: 100%;
-            width: 100%;
+            flex: 1;
             display: flex;
-            flex-direction: column;
+        }
+
+        /* LEFT */
+        .cd-left {
+            width: 45%;
+            display: flex;
             justify-content: center;
             align-items: center;
-            gap: 35px;   
-            text-align: center;
-            padding: 60px;
         }
 
-        /*  BIG TITLE */
-        .cd-title {
-            font-size: 48px;
-            color: #dc2626;
+        .cd-big-icon {
+            width: 240px;
+            max-width: 80%;
         }
 
-        /* BETTER TEXT SPACING */
-        .cd-message {
-            font-size: 20px;
-            max-width: 800px;
-            line-height: 1.6;
-            color: #475569;
-        }
+        /* RIGHT = MAIN BOX */
+        .cd-right {
+            width: 55%;
 
-        /* INFO BOX */
-        .cd-info {
-            font-size: 18px;
-            color: #334155;
+            background: #fee2e2;
+            border-radius: 18px;
+
+            padding: 50px;
+
             display: flex;
             flex-direction: column;
-            gap: 10px;
+
+            justify-content: space-between;   /* 🔥 layout control */
+
+            box-shadow: 0 25px 60px rgba(0,0,0,0.18);
+
+            margin-right: 50px;
+            margin-bottom: 50px
         }
 
-        /* BUTTONS SPACING */
+        /* TITLE */
+        .cd-title {
+            font-size: 46px;
+            color: #b91c1c;
+            margin: 0;
+        }
+
+        /* BODY CENTER */
+        .cd-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            text-align: center;
+        }
+
+        /* MESSAGE */
+        .cd-message {
+            font-size: 18px;
+            line-height: 1.7;
+            max-width: 600px;
+            color: #030810;
+        }
+
+        /* INFO */
+        .cd-info-box {
+            width: 100%;
+            max-width: 550px;
+
+            background: #f1f5f9;
+            padding: 18px;
+            border-radius: 12px;
+
+            text-align: left;
+        }
+
+        /* BUTTONS */
         .cd-buttons {
             display: flex;
-            gap: 25px;
-            margin-top: 20px;
+            justify-content: center;
+            gap: 20px;
         }
 
         .cd-buttons button {
-            padding: 16px 32px;
-            font-size: 16px;
+            padding: 14px 28px;
             border: none;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
             font-weight: 600;
+            transition: 0.2s;
         }
 
-        /* COLORS */
         .safe-btn {
             background: #2563eb;
             color: white;
@@ -158,6 +221,32 @@ window.addEventListener("load", async () => {
             background: #dc2626;
             color: white;
         }
+
+        .cd-buttons button:hover {
+            transform: scale(1.05);
+        }
+
+        @keyframes cd-pulse-shake {
+            0%   { transform: scale(1) translateX(0); }
+
+            15%  { transform: scale(1.15) translateX(-3px); }
+            30%  { transform: scale(1.25) translateX(3px); }
+
+            45%  { transform: scale(1.18) translateX(-2px); }
+            60%  { transform: scale(1.22) translateX(2px); }
+
+            75%  { transform: scale(1.1) translateX(-1px); }
+            90%  { transform: scale(1.05) translateX(1px); }
+
+            100% { transform: scale(1) translateX(0); }
+        }
+
+        .cd-big-icon {
+            width: 240px;
+            max-width: 80%;
+
+            animation: cd-pulse-shake 2.2s ease-out;
+        }
         `;
 
         document.head.appendChild(style);
@@ -166,33 +255,8 @@ window.addEventListener("load", async () => {
         return;
     }
 
-    // Warning for suspicious
     if (result.status === "suspicious") {
         alert("Warning: This site looks suspicious!");
     }
-
-    // Banner
-    const banner = document.createElement("div");
-
-    banner.innerText = `CyberDetect: ${result.status.toUpperCase()} (Score: ${result.score})`;
-
-    banner.style.position = "fixed";
-    banner.style.top = "0";
-    banner.style.left = "0";
-    banner.style.width = "100%";
-    banner.style.padding = "12px";
-    banner.style.color = "white";
-    banner.style.fontSize = "16px";
-    banner.style.textAlign = "center";
-    banner.style.zIndex = "2147483647";
-    banner.style.fontWeight = "bold";
-
-    if (result.status === "safe") {
-        banner.style.backgroundColor = "green";
-    } else {
-        banner.style.backgroundColor = "orange";
-    }
-
-    document.body.appendChild(banner);
 
 });
