@@ -1,0 +1,11 @@
+url,length,hasNumbers,numDots,hasHyphen,hasAtSymbol,label
+google.com,10,0,1,0,0,0
+youtube.com,11,0,1,0,0,0
+amazon.com,10,0,1,0,0,0
+g00gle.com,10,1,1,0,0,1
+paypa1.com,10,1,1,0,0,1
+secure-login-paypal.com,25,0,2,1,0,1
+xj3k9sd8f.com,15,1,1,0,0,1
+random123-site.net,20,1,2,1,0,1
+login.verify-account.com,25,0,2,1,0,1
+normalwebsite.org,18,0,1,0,0,0  
