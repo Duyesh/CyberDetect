@@ -13,12 +13,14 @@
   "permissions": [
     "tabs",
     "activeTab",
+    "storage",
     "scripting",
     "notifications"
   ],
 
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://dns.google/*"
   ],
 
   "background": {
@@ -42,6 +44,9 @@
         "utils/featureExtractor.js",
         "utils/mlModel.js",
         "utils/dnsChecker.js",
+        "utils/emailChecker.js",
+        "utils/emailAuthSim.js",
+        "utils/gmailScanner.js",
         "content/content.js"
       ],
       "css": ["styles/content.css"]

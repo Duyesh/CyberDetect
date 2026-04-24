@@ -1,158 +1,111 @@
-// DNS Analysis Engine
-console.log("NEW DNS CHECKER LOADED");
-// Extract domain from URL
-function getDomain(url) {
+console.log("DNS CHECKER LOADED");
+
+async function checkDNS(url) {
+    let domain;
     try {
-        return new URL(url).hostname.toLowerCase();
+        const data = await response.json();
     } catch {
-        return null;
-    }
-}
-
-// Extract root domain (example: login.paypal.com → paypal.com)
-function getRootDomain(domain) {
-    if (!domain) return null;
-
-    const parts = domain.split(".");
-    return parts.slice(-2).join(".");
-}
-
-// Trusted domains
-const trustedDomains = [
-    "google.com",
-    "paypal.com",
-    "amazon.com",
-    "razorpay.com",
-    "cloudflare.com",
-    "youtube.com",
-    "mongodb.com",
-    "github.com",
-    "stackoverflow.com"
-];
-
-// Similarity check (typo detection)
-function similarity(a, b) {
-    let matches = 0;
-
-    for (let i = 0; i < Math.min(a.length, b.length); i++) {
-        if (a[i] === b[i]) matches++;
+        return { status: "safe", score: 100, flags: [] };
     }
 
-    return matches / Math.max(a.length, b.length);
-}
-
-// Entropy check (random-looking domains)
-function calculateEntropy(str) {
-    let uniqueChars = new Set(str);
-    return uniqueChars.size / str.length;
-}
-
-//  MAIN FUNCTION
-function checkDNS(url) {
-
-    const domain = getDomain(url);
-    const rootDomain = getRootDomain(domain);
-
-    console.log("Checking domain:", domain);
-
-    // STEP 0: STRONG PHISHING RULES
-
-    // Try detecting @ from multiple sources
-    const rawUrl = document.URL || window.location.href;
-
-    // Direct check
-    if (rawUrl.includes("@")) {
-        return {
-            status: "spoofed",
-            score: 5
-        };
+    // STEP 1: @ symbol = instant phishing
+    if (url.includes("@")) {
+        return { status: "spoofed", score: 5, flags: ["@ symbol found in URL — classic phishing pattern"] };
     }
 
-    //  Suspicious mismatch between URL and domain
-    if (url.includes("@") && domain && !url.includes(domain)) {
-        return {
-            status: "spoofed",
-            score: 5
-        };
-    }
+    try {
+        // STEP 2: Real DNS lookup via Google DNS-over-HTTPS
+        let data;
 
-    // Detect suspicious mismatch patterns
-    if (url.includes("login") || url.includes("secure") || url.includes("verify")) {
-        if (domain && domain.includes("-")) {
+        try {
+            const response = await fetch(
+                `https://dns.google/resolve?name=${domain}&type=A`
+            );
+
+            if (!response.ok) {
+                throw new Error("DNS fetch failed");
+            }
+
+            data = await response.json();
+
+        } catch (err) {
+            console.error("DNS FETCH FAILED:", err);
+
             return {
-                status: "spoofed",
-                score: 10
+                status: "safe",
+                score: 80,
+                flags: ["DNS lookup failed"]
             };
         }
-    }
 
-    //  STEP 1: Trusted domain check
-    if (rootDomain && trustedDomains.some(d => rootDomain.endsWith(d))) {
-        return { status: "safe", score: 95 };
-    }
+        let flags = [];
+        let anomalyScore = 0;
 
-    //  STEP 2: Subdomain attack
-    if (domain && rootDomain) {
-        for (let legit of trustedDomains) {
-            if (domain.includes(legit) && !rootDomain.endsWith(legit)) {
-                return { status: "spoofed", score: 10 };
-            }
+        // RULE 1: Domain does not resolve at all
+        if (!data.Answer || data.Answer.length === 0) {
+            flags.push("No A records found — domain does not exist");
+            return { status: "spoofed", score: 5, flags };
         }
-    }
 
-    //  STEP 3: Typo detection
-    if (rootDomain) {
-        for (let legit of trustedDomains) {
-            const sim = similarity(rootDomain, legit);
+        const aRecords = (data.Answer || []).filter(r => r.type === 1);
+        const ips = aRecords.map(r => r.data);
+        const ttl = aRecords.length ? aRecords[0].TTL : 0;
 
-            if (sim > 0.75 && rootDomain !== legit) {
-                return { status: "spoofed", score: 20 };
-            }
+        // RULE 2: Very low TTL — cache poisoning signal
+        if (ttl > 0 && ttl < 300) {
+            anomalyScore += 0.3;
+            flags.push(`Suspiciously low TTL: ${ttl}s — possible DNS cache poisoning`);
         }
-    }
 
-    //  STEP 4: Entropy detection
-    if (rootDomain) {
-        const name = rootDomain.split(".")[0];
-        const entropy = calculateEntropy(name);
-
-        if (entropy > 0.6 && name.length > 6) {
-            return { status: "suspicious", score: 30 };
+        // RULE 3: Private/loopback IP returned for public domain
+        const hasPrivateIP = ips.some(ip =>
+            ip.startsWith("127.") ||
+            ip.startsWith("10.") ||
+            ip.startsWith("192.168.") ||
+            ip.startsWith("169.254.") ||
+            ip === "0.0.0.0"
+        );
+        if (hasPrivateIP) {
+            anomalyScore += 0.5;
+            flags.push("Private IP in DNS response — possible DNS hijacking");
         }
+
+        // RULE 4: Too many IPs
+        if (ips.length > 5) {
+            anomalyScore += 0.25;
+            flags.push(`Excessive IP count: ${ips.length} addresses returned`);
+        }
+
+        // RULE 5: Suspicious keyword + hyphen in domain
+        if (
+            (domain.includes("login") ||
+             domain.includes("secure") ||
+             domain.includes("verify") ||
+             domain.includes("update") ||
+             domain.includes("confirm")) &&
+            domain.includes("-")
+        ) {
+            anomalyScore += 0.3;
+            flags.push("Suspicious keyword + hyphen in domain name");
+        }
+
+        // Final score calculation
+        const finalScore = Math.min(anomalyScore, 1.0);
+
+        let status = "safe";
+        if (finalScore >= 0.5) status = "spoofed";
+        else if (finalScore >= 0.25) status = "suspicious";
+
+        return {
+            status,
+            score: Math.round((1 - finalScore) * 100),
+            flags,
+            ips,
+            ttl
+        };
+
+    } catch (err) {
+        console.error("DNS lookup error:", err);
+        return { status: "safe", score: 80, flags: ["DNS lookup could not be completed"] };
     }
-
-    //  STEP 5: Feature-based analysis
-    const features = extractFeatures(url);
-
-    let risk = 0;
-
-    if (features.hasAtSymbol) risk += 50;
-    if (features.numDots > 4) risk += 20;
-    if (features.hasNumbers && features.length > 60) risk += 15;
-
-    // Base status
-    let status = "safe";
-
-    if (risk >= 50) {
-        status = "spoofed";
-    } else if (risk >= 25) {
-        status = "suspicious";
-    }
-
-    //  STEP 6: ML integration
-    const mlResult = predictML(features);
-
-    if (mlResult === "suspicious" && status === "safe") {
-        status = "suspicious";
-    }
-
-    // FINAL DECISION
-    if (status === "suspicious") {
-        status = "spoofed"; // AGGRESSIVE MODE
-    }
-
-    return {
-        status,
-        score: 100 - risk
-    };
 }

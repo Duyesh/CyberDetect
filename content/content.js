@@ -1,7 +1,141 @@
 window.addEventListener("load", async () => {
 
+    if (sessionStorage.getItem("cd_bypass") === "true") {
+        console.log("Bypass active — allowing page");
+
+        sessionStorage.removeItem("cd_bypass");
+        return;
+    }
+
     const url = window.location.href;
-    const result = checkDNS(url);
+    const hostname = window.location.hostname;
+    // Skip blocker on Gmail (let gmailScanner handle it)
+    const isEmailClient =
+        hostname.includes("mail.google.com") ||
+        hostname.includes("mail.yahoo.com") ||
+        hostname.includes("outlook.live.com") ||
+        hostname.includes("outlook.office.com") ||
+        hostname.includes("mail.rediff.com");
+
+    if (isEmailClient) {
+        console.log("Email client detected — skipping content.js logic");
+        return;
+    }
+
+    const result =await checkDNS(url);
+    let emailResult = { status: "safe", score: 100 };
+
+    // Only run email check on relevant pages
+    if (
+         document.body &&
+        (
+            document.body.innerText.includes("verify") ||
+            document.body.innerText.includes("account") ||
+            document.body.innerText.includes("password") ||
+            document.body.innerText.includes("register") ||
+            document.body.innerText.includes("login")
+        )
+    ) {
+        emailResult = checkEmail();
+    }
+
+    let finalStatus = result.status;
+    let finalScore = result.score;
+    
+    const rules = [
+        {
+            condition: () => result.status === "spoofed",
+            action: () => "spoofed"
+        },
+        {
+            condition: () => emailResult.status === "spoofed",
+            action: () => "suspicious"
+        },
+        {
+            condition: () =>
+                result.status === "suspicious" ||
+                emailResult.status === "suspicious",
+            action: () => "suspicious"
+        }
+    ];
+
+    // evaluate rules
+    for (const rule of rules) {
+        if (rule.condition()) {
+            finalStatus = rule.action();
+            break;
+        }
+    }
+
+    function showTopIndicator(status, score) {
+
+        const old = document.querySelector(".cd-indicator");
+        if (old) old.remove();
+
+        const el = document.createElement("div");
+        el.className = "cd-indicator";
+
+        const map = {
+            safe:        { text: "SAFE",        color: "#16a34a" },
+            suspicious:  { text: "SUSPICIOUS",  color: "#f97316" },
+            spoofed:     { text: "BLOCKED",     color: "#dc2626" }
+        };
+
+        const cfg = map[status] || map.safe;
+
+        el.innerText = `CyberDetect: ${cfg.text} (${score})`;
+
+        Object.assign(el.style, {
+            position: "fixed",
+            top: "8px",
+            left: "10px",
+            padding: "6px 10px",
+            background: cfg.color,
+            color: "white",
+            fontSize: "12px",
+            borderRadius: "6px",
+            zIndex: "999999999",
+            fontWeight: "600",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+            opacity: "0.95"
+        });
+
+        document.body.appendChild(el);
+
+        setTimeout(() => {
+            el.style.transition = "opacity 0.4s";
+            el.style.opacity = "0";
+        }, 4000);
+    }
+
+    let confidence = "Low";
+
+    if (finalScore > 70) confidence = "High";
+    else if (finalScore > 40) confidence = "Medium";
+
+    chrome.storage.local.get("cyberdetect_history", (data) => {
+
+        let history = data.cyberdetect_history || [];
+
+        // add new entry at top
+        history.unshift({
+            confidence: confidence,
+            url: window.location.href,
+            status: finalStatus,
+            score: finalScore,
+            time: new Date().toLocaleTimeString()
+        });
+                
+        // keep only last 5
+        history = history.slice(0, 5);
+
+        chrome.storage.local.set({
+            cyberdetect_last: history[0],
+            cyberdetect_history: history
+        });
+    });
+
+    console.log("Email Result:", emailResult);
 
     if (!result || !result.status) return;
 
@@ -15,7 +149,7 @@ window.addEventListener("load", async () => {
         }
     }
 
-    if (result.status === "spoofed") {
+    if (finalStatus === "spoofed" || finalStatus === "suspicious") {
 
         const ip = await getIP();
 
@@ -42,12 +176,17 @@ window.addEventListener("load", async () => {
                 <!-- RIGHT -->
                 <div class="cd-right">
 
-                    <h1 class="cd-title">Access Blocked</h1>
+                    <h1 class="cd-title">
+                        ${finalStatus === "spoofed" ? "Access Blocked" : "Suspicious Website"}
+                    </h1>
 
                     <div class="cd-body">
                         <p class="cd-message">
-                            This website has been identified as a potential phishing or spoofing threat.
-                            CyberDetect prevented access to protect your data and credentials.
+                            ${
+                                finalStatus === "spoofed"
+                                ? "This website has been identified as a high-risk phishing or spoofing threat."
+                                : "This website appears suspicious and may not be safe to use."
+                            }
                         </p>
 
                         <div class="cd-info-box">
@@ -61,7 +200,10 @@ window.addEventListener("load", async () => {
                             Go Back
                         </button>
 
-                        <button class="danger-btn" onclick="window.location.reload()">
+                        <button class="danger-btn" onclick="
+                            sessionStorage.setItem('cd_bypass', 'true');
+                            window.location.reload();
+                        ">
                             Continue (Unsafe)
                         </button>
                     </div>
@@ -152,7 +294,7 @@ window.addEventListener("load", async () => {
             display: flex;
             flex-direction: column;
 
-            justify-content: space-between;   /* 🔥 layout control */
+            justify-content: space-between;   
 
             box-shadow: 0 25px 60px rgba(0,0,0,0.18);
 
@@ -255,8 +397,8 @@ window.addEventListener("load", async () => {
         return;
     }
 
-    if (result.status === "suspicious") {
-        alert("Warning: This site looks suspicious!");
+    if (finalStatus === "safe") {
+        showTopIndicator(finalStatus, finalScore);
     }
 
 });

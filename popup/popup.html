@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberDetect</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            padding: 15px;
+            width: 260px;
+            background: #f8fafc;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .safe { background: #16a34a; }
+        .suspicious { background: #f97316; }
+        .spoofed { background: #dc2626; }
+
+        .info {
+            margin-top: 12px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>CyberDetect</h2>
+
+    <div id="statusBox" class="status">Loading...</div>
+
+    <div id="details" class="info"></div>
+    
+    <h3 style="margin-top:15px;">Recent Scans</h3>
+    <div id="history"></div>
+
+    
+    <script src="popup.js"></script>
+
+</body>
+</html>
