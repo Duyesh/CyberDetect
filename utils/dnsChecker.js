@@ -1,10 +1,17 @@
 console.log("DNS CHECKER LOADED");
 
-async function checkDNS(url) {
-    let domain;
+function getDomain(url) {
     try {
-        const data = await response.json();
+        return new URL(url).hostname.toLowerCase();
     } catch {
+        return null;
+    }
+}
+
+async function checkDNS(url) {
+    const domain = getDomain(url);
+
+    if (!domain) {
         return { status: "safe", score: 100, flags: [] };
     }
 
